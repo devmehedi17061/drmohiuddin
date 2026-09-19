@@ -1,26 +1,118 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ============================================================
+   Design tokens
+   Brand ramp is a deep medical teal; amber is reserved for the
+   "call now" affordances so they read as urgent, not decorative.
+   ============================================================ */
+@theme {
+  --font-sans: var(--font-bangla), "Hind Siliguri", ui-sans-serif, system-ui, sans-serif;
+  --font-latin: var(--font-latin), ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #eef9fa;
+  --color-brand-100: #d3f0f3;
+  --color-brand-200: #ace0e7;
+  --color-brand-300: #74c9d6;
+  --color-brand-400: #38a8bc;
+  --color-brand-500: #1d8ba1;
+  --color-brand-600: #166f88;
+  --color-brand-700: #145a6e;
+  --color-brand-800: #154a5b;
+  --color-brand-900: #143e4d;
+  --color-brand-950: #0a2733;
+
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+
+  --color-ink-900: #0f1c22;
+  --color-ink-700: #26404a;
+  --color-ink-500: #55707c;
+  --color-ink-400: #7c939d;
+  --color-ink-300: #a9bcc4;
+
+  --color-surface: #ffffff;
+  --color-surface-muted: #f4f8f9;
+  --color-line: #dfe9ec;
+
+  --radius-card: 1rem;
+
+  --shadow-soft: 0 1px 2px rgb(10 39 51 / 0.04), 0 8px 24px -12px rgb(10 39 51 / 0.18);
+  --shadow-lift: 0 2px 4px rgb(10 39 51 / 0.05), 0 18px 40px -18px rgb(10 39 51 / 0.28);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  html {
+    scroll-behavior: smooth;
+    /* Offset for the sticky header when jumping to an anchor. */
+    scroll-padding-top: 6.5rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--color-surface);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    /* Bangla glyphs need a little more room to breathe than Latin. */
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: 1.35;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-brand-100);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .container-page {
+    width: 100%;
+    max-width: 76rem;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+
+  @media (min-width: 1024px) {
+    .container-page {
+      padding-inline: 2rem;
+    }
+  }
+
+  /* Numerals and Latin words inside Bangla copy. */
+  .latin {
+    font-family: var(--font-latin);
+    font-feature-settings: "tnum";
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -1,69 +1,121 @@
-import Image from "next/image";
+import type { Metadata } from "next";
+import { getLandingPageData, getSettings } from "@/lib/data/content";
+import { jsonLd } from "@/lib/jsonld";
+import { Header } from "@/components/site/Header";
+import { Hero } from "@/components/site/Hero";
+import { StatsBar } from "@/components/site/StatsBar";
+import { About } from "@/components/site/About";
+import { Services } from "@/components/site/Services";
+import { Chambers } from "@/components/site/Chambers";
+import { SectionHeading } from "@/components/site/SectionHeading";
+import { PhotoGallery } from "@/components/site/PhotoGallery";
+import { VideoGallery } from "@/components/site/VideoGallery";
+import { Testimonials } from "@/components/site/Testimonials";
+import { Contact } from "@/components/site/Contact";
+import { Faq } from "@/components/site/Faq";
+import { Footer } from "@/components/site/Footer";
+import { FloatingActions } from "@/components/site/FloatingActions";
 
-export default function Home() {
+/** Rebuilt at most once a minute; admin edits call revalidatePath("/") for an instant refresh. */
+export const revalidate = 60;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getSettings();
+  return {
+    title: settings.seo_title || settings.site_name,
+    description: settings.seo_description,
+    openGraph: {
+      title: settings.seo_title || settings.site_name,
+      description: settings.seo_description,
+      type: "profile",
+      locale: "bn_BD",
+      images: settings.hero_image ? [{ url: settings.hero_image }] : undefined,
+    },
+  };
+}
+
+export default async function HomePage() {
+  const { settings, services, stats, credentials, chambers, gallery, videos, faqs, testimonials } =
+    await getLandingPageData();
+
+  const physicianLd = {
+    "@context": "https://schema.org",
+    "@type": "Physician",
+    name: settings.hero_name || settings.site_name,
+    medicalSpecialty: "Urology",
+    description: settings.seo_description,
+    telephone: settings.contact_phone || undefined,
+    email: settings.contact_email || undefined,
+    url: process.env.NEXT_PUBLIC_SITE_URL,
+    address: chambers.map((chamber) => ({
+      "@type": "PostalAddress",
+      name: chamber.name,
+      streetAddress: chamber.address ?? undefined,
+    })),
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+    <>
+      <Header
+        siteName={settings.site_name}
+        tagline={settings.site_tagline}
+        phone={settings.contact_phone}
+        logo={settings.site_logo}
+      />
+
+      <main>
+        <Hero settings={settings} />
+        <StatsBar stats={stats} />
+        <About settings={settings} credentials={credentials} />
+        <Services settings={settings} services={services} />
+        <Chambers settings={settings} chambers={chambers} />
+
+        {gallery.length ? (
+          <section id="gallery" className="bg-surface-muted py-16 lg:py-24">
+            <div className="container-page">
+              <SectionHeading
+                eyebrow="গ্যালারি"
+                title={settings.gallery_title || "ফটো গ্যালারি"}
+                subtitle={settings.gallery_subtitle}
+              />
+              <div className="mt-12">
+                <PhotoGallery images={gallery} />
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {videos.length ? (
+          <section id="videos" className="py-16 lg:py-24">
+            <div className="container-page">
+              <SectionHeading
+                eyebrow="ভিডিও"
+                title={settings.video_title || "ভিডিও গ্যালারি"}
+                subtitle={settings.video_subtitle}
+              />
+              <div className="mt-12">
+                <VideoGallery videos={videos} />
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        <Testimonials settings={settings} testimonials={testimonials} />
+        <Contact settings={settings} chambers={chambers} />
+        <Faq settings={settings} faqs={faqs} />
       </main>
-    </div>
+
+      <Footer settings={settings} services={services} />
+
+      <FloatingActions
+        phone={settings.contact_phone}
+        whatsapp={settings.contact_whatsapp}
+      />
+
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd(physicianLd) }}
+      />
+    </>
   );
 }

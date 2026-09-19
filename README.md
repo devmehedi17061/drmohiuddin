@@ -94,6 +94,10 @@ When a URL carries both `v=` and `list=`, the ধরন dropdown decides which o
 - Failed logins are throttled per email *and* per IP (6 attempts / 15 min).
 - The last active admin cannot be deleted, demoted or deactivated.
 - Every write is recorded in `audit_logs`.
+- **Every** logged-in user (ADMIN or EDITOR) can change their own name/password from
+  আমার প্রোফাইল (bottom of the sidebar) — no admin needed for that. It requires the
+  current password, and a password change signs that account out everywhere else while
+  keeping the tab that made the change signed in.
 
 ### Hardening applied
 
@@ -118,7 +122,16 @@ When a URL carries both `v=` and `list=`, the ধরন dropdown decides which o
   sharing one NAT can lock each other out. Tune `MAX_ATTEMPTS` in `src/lib/auth/session.ts`.
 - CSP keeps `script-src 'unsafe-inline'`: a nonce would force per-request rendering and give
   up the landing page's ISR cache.
-- There is no password-reset flow; an ADMIN resets another user's password from the panel.
+- If the only admin account gets locked out (forgotten password, or a hash edited by
+  hand directly in the database), recover it from a terminal — **never** paste a
+  hash from an external generator directly into `users.password_hash`; it won't be
+  in the format this app verifies against, and locks the account out with no
+  in-app way back in:
+  ```bash
+  npm run db:reset-password admin@drmohiuddin.com "NewPassword123"
+  ```
+  This signs that account out everywhere and sets a real bcrypt hash at the app's own
+  cost factor. See `db/reset-password.mjs`.
 
 ### Uploads
 
@@ -155,7 +168,9 @@ Adding a new content section usually means adding one entry to
 | `npm run lint` | ESLint |
 | `npm run db:setup` | Apply `db/schema.sql` (idempotent) |
 | `npm run db:seed` | First admin + placeholder content (idempotent) |
-| `npm run db:reset` | setup + seed |
+| `npm run db:migrate` | Apply schema changes to an existing database (idempotent) |
+| `npm run db:reset-password <email> <password>` | Recover a locked-out account |
+| `npm run db:reset` | setup + seed + migrate |
 
 ---
 
