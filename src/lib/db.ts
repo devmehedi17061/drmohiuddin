@@ -42,8 +42,21 @@ function createPool(): Pool {
   return pool;
 }
 
-export const pool: Pool = global.__drmPool ?? createPool();
-if (process.env.NODE_ENV !== "production") global.__drmPool = pool;
+let localPool: Pool | undefined;
+
+/**
+ * Created on first query rather than at import time. `next build` imports
+ * every page module while "collecting page data" - before it renders
+ * anything - and an eager pool made that phase throw the moment DATABASE_URL
+ * was missing, hiding the real failure point. Lazily, an unset variable only
+ * surfaces where a query actually runs.
+ */
+function getPool(): Pool {
+  if (process.env.NODE_ENV !== "production") {
+    return (global.__drmPool ??= createPool());
+  }
+  return (localPool ??= createPool());
+}
 
 /**
  * Adapts a MySQL-flavoured query string (kept as-is at every call site for a
@@ -79,7 +92,7 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   sql: string,
   params: SqlParam[] = [],
 ): Promise<T[]> {
-  const result = await pool.query<T>(toPostgres(sql), params);
+  const result = await getPool().query<T>(toPostgres(sql), params);
   return result.rows;
 }
 
@@ -111,7 +124,7 @@ export async function execute(sql: string, params: SqlParam[] = []): Promise<Exe
   const withReturning =
     isInsert && !hasReturning && !targetsSettings ? `${sql} RETURNING id` : sql;
 
-  const result = await pool.query(toPostgres(withReturning), params);
+  const result = await getPool().query(toPostgres(withReturning), params);
   const insertId =
     isInsert && !targetsSettings && result.rows[0]?.id !== undefined
       ? Number(result.rows[0].id)
@@ -122,7 +135,7 @@ export async function execute(sql: string, params: SqlParam[] = []): Promise<Exe
 
 /** Runs `fn` inside a transaction, rolling back on any throw. */
 export async function transaction<T>(fn: (conn: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const client = await getPool().connect();
   try {
     await client.query("BEGIN");
     const result = await fn(client);
@@ -139,7 +152,7 @@ export async function transaction<T>(fn: (conn: PoolClient) => Promise<T>): Prom
 /** True when the database is reachable - used by the setup/health checks. */
 export async function pingDatabase(): Promise<boolean> {
   try {
-    await pool.query("SELECT 1");
+    await getPool().query("SELECT 1");
     return true;
   } catch {
     return false;
