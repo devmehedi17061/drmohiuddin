@@ -14,6 +14,7 @@
     "db:reset": "node db/setup.mjs && node db/seed.mjs && node db/migrate.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.10",
     "lucide-react": "^1.39.0",

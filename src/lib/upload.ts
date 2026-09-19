@@ -1,15 +1,14 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { mkdir, writeFile, unlink } from "node:fs/promises";
-import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
 import sharp, { type Metadata, type Sharp } from "sharp";
 
-const PUBLIC_DIR = path.join(process.cwd(), "public");
+const BUCKET = "uploads";
 const MAX_BYTES = 8 * 1024 * 1024; // 8 MB per file
 const ALLOWED = new Set(["jpeg", "jpg", "png", "webp", "gif", "avif", "tiff"]);
 
 export interface StoredImage {
-  /** Web path, e.g. /uploads/gallery/ab12cd.webp */
+  /** Public URL, e.g. https://<ref>.supabase.co/storage/v1/object/public/uploads/gallery/ab12cd.webp */
   filePath: string;
   width: number;
   height: number;
@@ -17,13 +16,36 @@ export interface StoredImage {
 
 export class UploadError extends Error {}
 
+let cachedClient: ReturnType<typeof createClient> | null = null;
+
 /**
- * Validates, re-encodes and stores an uploaded image.
+ * A server-only Supabase client authenticated as the service role, so it
+ * bypasses the (deliberately policy-less) Storage RLS on this bucket. Vercel's
+ * serverless functions have a read-only filesystem, so uploads can't be
+ * written to disk the way a traditional server could - they go to Supabase
+ * Storage instead, which every deployment (and every instance of one) can
+ * reach the same way.
+ */
+function storageClient() {
+  if (cachedClient) return cachedClient;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new UploadError(
+      "File uploads are not configured: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.",
+    );
+  }
+  cachedClient = createClient(url, key, { auth: { persistSession: false } });
+  return cachedClient;
+}
+
+/**
+ * Validates, re-encodes and stores an uploaded image in Supabase Storage.
  *
  * The file is decoded with sharp and written back out as WebP, so whatever the
  * browser sent (including anything with a spoofed extension or embedded script
- * payload) never reaches disk in its original form. Filenames are random, so a
- * caller cannot influence the path.
+ * payload) never reaches storage in its original form. Object names are
+ * random, so a caller cannot influence the path.
  */
 export async function storeImage(file: File, folder = "gallery"): Promise<StoredImage> {
   if (!file || file.size === 0) throw new UploadError("The file is empty.");
@@ -47,10 +69,8 @@ export async function storeImage(file: File, folder = "gallery"): Promise<Stored
   }
 
   const safeFolder = folder.replace(/[^a-z0-9-]/gi, "") || "gallery";
-  const dir = path.join(PUBLIC_DIR, "uploads", safeFolder);
-  await mkdir(dir, { recursive: true });
-
   const name = `${Date.now().toString(36)}-${randomBytes(6).toString("hex")}.webp`;
+  const objectPath = `${safeFolder}/${name}`;
 
   const output = await image
     .rotate() // honour EXIF orientation before stripping metadata
@@ -58,26 +78,36 @@ export async function storeImage(file: File, folder = "gallery"): Promise<Stored
     .webp({ quality: 82 })
     .toBuffer({ resolveWithObject: true });
 
-  await writeFile(path.join(dir, name), output.data);
+  const { error } = await storageClient()
+    .storage.from(BUCKET)
+    .upload(objectPath, output.data, { contentType: "image/webp", upsert: false });
+  if (error) throw new UploadError(`Upload failed: ${error.message}`);
+
+  const {
+    data: { publicUrl },
+  } = storageClient().storage.from(BUCKET).getPublicUrl(objectPath);
 
   return {
-    filePath: `/uploads/${safeFolder}/${name}`,
+    filePath: publicUrl,
     width: output.info.width,
     height: output.info.height,
   };
 }
 
 /**
- * Deletes a previously stored upload. Refuses anything outside public/uploads so a
- * tampered database row cannot be used to delete arbitrary files.
+ * Deletes a previously stored upload. Refuses anything outside this project's
+ * own `uploads` bucket so a tampered database row cannot be used to delete
+ * arbitrary storage objects.
  */
 export async function removeUpload(filePath: string | null | undefined): Promise<void> {
-  if (!filePath || !filePath.startsWith("/uploads/")) return;
-  const resolved = path.resolve(PUBLIC_DIR, `.${filePath}`);
-  const uploadsRoot = path.join(PUBLIC_DIR, "uploads");
-  if (!resolved.startsWith(uploadsRoot + path.sep)) return;
+  if (!filePath) return;
+  const marker = `/storage/v1/object/public/${BUCKET}/`;
+  const idx = filePath.indexOf(marker);
+  if (idx === -1) return;
+  const objectPath = filePath.slice(idx + marker.length);
+  if (!objectPath) return;
   try {
-    await unlink(resolved);
+    await storageClient().storage.from(BUCKET).remove([objectPath]);
   } catch {
     // Already gone - nothing to do.
   }

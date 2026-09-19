@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { getLandingPageData, getSettings } from "@/lib/data/content";
 import { jsonLd } from "@/lib/jsonld";
+import { siteUrlString } from "@/lib/site-url";
 import { Header } from "@/components/site/Header";
 import { Hero } from "@/components/site/Hero";
 import { StatsBar } from "@/components/site/StatsBar";
@@ -46,7 +47,7 @@ export default async function HomePage() {
     description: settings.seo_description,
     telephone: settings.contact_phone || undefined,
     email: settings.contact_email || undefined,
-    url: process.env.NEXT_PUBLIC_SITE_URL,
+    url: siteUrlString(),
     address: chambers.map((chamber) => ({
       "@type": "PostalAddress",
       name: chamber.name,

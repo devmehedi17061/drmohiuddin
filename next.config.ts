@@ -2,6 +2,13 @@ import type { NextConfig } from "next";
 
 const isProd = process.env.NODE_ENV === "production";
 
+// Uploaded images are stored in Supabase Storage (public bucket), not on local
+// disk - Vercel's serverless functions have a read-only filesystem, so this is
+// the same host in every environment.
+const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
+  : undefined;
+
 /**
  * Content Security Policy.
  *
@@ -16,7 +23,7 @@ const csp = [
   // 'unsafe-eval' is only needed by the dev-mode React Refresh runtime.
   `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com",
+  `img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com${supabaseHost ? ` https://${supabaseHost}` : ""}`,
   "font-src 'self' data:",
   // Dev needs the HMR websocket; production talks only to its own origin.
   `connect-src 'self'${isProd ? "" : " ws: http://localhost:*"}`,
@@ -52,6 +59,9 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "i.ytimg.com" },
       { protocol: "https", hostname: "img.youtube.com" },
+      ...(supabaseHost
+        ? [{ protocol: "https" as const, hostname: supabaseHost, pathname: "/storage/v1/object/public/**" }]
+        : []),
     ],
     formats: ["image/avif", "image/webp"],
   },
@@ -66,16 +76,6 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
-      {
-        // Uploaded media has a random, content-specific filename, so it never changes.
-        source: "/uploads/:path*",
-        headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-          // Serve uploads as inert files even if something odd got stored.
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Content-Disposition", value: "inline" },
-        ],
-      },
       {
         // The admin panel must never be cached or indexed.
         source: "/admin-panel/:path*",
