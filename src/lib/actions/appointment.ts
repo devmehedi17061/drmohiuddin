@@ -78,7 +78,8 @@ export async function submitAppointment(
       ok: true,
       message: "ধন্যবাদ! আপনার অনুরোধ পাঠানো হয়েছে। আমরা শীঘ্রই যোগাযোগ করব।",
     };
-  } catch {
+  } catch (err) {
+    console.error("[appointment] insert failed", err);
     return { ok: false, message: "দুঃখিত, এখন পাঠানো যায়নি। অনুগ্রহ করে ফোনে যোগাযোগ করুন।" };
   }
 }

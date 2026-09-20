@@ -117,7 +117,8 @@ export async function saveUser(_prev: FormState, formData: FormData): Promise<Fo
     await audit(actor, "create", "users", result.insertId, role);
     revalidatePath("/admin-panel/dashboard/users");
     return { ok: true, message: "New user created." };
-  } catch {
+  } catch (err) {
+    console.error("[users] create failed", err);
     return { ok: false, message: "Could not save. Please try again." };
   }
 }

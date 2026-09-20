@@ -46,6 +46,7 @@ export async function saveSettings(_prev: FormState, formData: FormData): Promis
           updates.push({ key: field.key, value: stored.filePath });
           if (current) stale.push(current);
         } catch (err) {
+          if (!(err instanceof UploadError)) console.error("[settings] unexpected upload error", err);
           errors[field.key] = err instanceof UploadError ? err.message : "Image upload failed.";
         }
       } else if (remove) {
@@ -75,7 +76,11 @@ export async function saveSettings(_prev: FormState, formData: FormData): Promis
   }
 
   if (Object.keys(errors).length) {
-    return { ok: false, message: "There are some errors in the form.", errors };
+    return {
+      ok: false,
+      message: "Nothing was saved. Please fix the errors below and click Save again.",
+      errors,
+    };
   }
 
   try {
@@ -95,7 +100,8 @@ export async function saveSettings(_prev: FormState, formData: FormData): Promis
     revalidatePath("/admin-panel/dashboard/settings");
 
     return { ok: true, message: `"${group.title}" saved.` };
-  } catch {
+  } catch (err) {
+    console.error("[settings] save failed", err);
     return { ok: false, message: "Could not save. Please try again." };
   }
 }

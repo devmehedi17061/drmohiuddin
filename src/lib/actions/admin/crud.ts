@@ -79,6 +79,7 @@ async function prepareField(
         const stored = await storeImage(file, field.folder ?? "misc");
         return { value: stored.filePath, written: stored.filePath, stale: current || undefined };
       } catch (err) {
+        if (!(err instanceof UploadError)) console.error("[crud] unexpected upload error", err);
         return { error: err instanceof UploadError ? err.message : "Image upload failed." };
       }
     }
@@ -230,7 +231,8 @@ export async function saveRecord(_prev: FormState, formData: FormData): Promise<
     revalidateSite(key);
 
     return { ok: true, message: id ? "Changes saved." : `New ${config.singular} added.` };
-  } catch {
+  } catch (err) {
+    console.error("[crud] save failed", err);
     await Promise.all(prepared.written.map(removeUpload));
     return fail("Could not save to the database.");
   }

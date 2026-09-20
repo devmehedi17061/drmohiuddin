@@ -1,6 +1,6 @@
 # ডা. মহিউদ্দিন — Urology Landing Page
 
-Next.js 16 (App Router) + TypeScript + Tailwind v4 + MySQL. A single Bengali landing page
+Next.js 16 (App Router) + TypeScript + Tailwind v4 + Supabase (Postgres + Storage). A single Bengali landing page
 with a full admin panel; no blog.
 
 ---
@@ -21,13 +21,42 @@ Public site: <http://localhost:3000>  ·  Admin: <http://localhost:3000/admin-pa
 
 | Variable | Notes |
 | --- | --- |
-| `DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_NAME` | XAMPP defaults work as-is |
+| `DATABASE_URL` | Supabase → Project Settings → Database → Connection string (URI). Use the **pooler** host on port **6543** (transaction mode). |
+| `DB_POOL_SIZE` | Max connections per process (keep small on serverless, e.g. `3`) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL. **Read at build time** (image domains / CSP). |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → anon public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → service_role **secret**. Server-only — required for image uploads. Never prefix with `NEXT_PUBLIC_`. |
 | `AUTH_SECRET` | **32+ chars.** `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `SESSION_MAX_AGE` | Session lifetime in seconds (default 43200 = 12h) |
 | `ADMIN_NAME` / `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Used **only** by `npm run db:seed` |
 | `NEXT_PUBLIC_SITE_URL` | Used for SEO metadata and JSON-LD |
 
+### Image uploads (Supabase Storage)
+
+Uploaded images (logo, hero/about photos, gallery) are re-encoded to WebP and written to a
+Supabase Storage bucket — not to disk, because Vercel's filesystem is read-only.
+Create it once per project: Supabase → Storage → **New bucket** → name `uploads`,
+**Public bucket: on**. (Optional: file size limit 8 MB, allowed MIME type `image/webp`.)
+
 Change `ADMIN_PASSWORD` before seeding, and change it again from the panel afterwards.
+
+---
+
+## Deploying to Vercel
+
+1. Vercel → Project → **Settings → Environment Variables**. Add **every** variable from the
+   `.env.local` table above (except the `ADMIN_*` seed ones) for the *Production* environment.
+   `.env.local` is git-ignored, so nothing from it reaches Vercel on its own.
+2. **Redeploy** after adding or changing variables (Deployments → ⋯ → Redeploy, with
+   "Use existing Build Cache" **off**). `NEXT_PUBLIC_*` values are baked in at build time, so a
+   running deployment never picks up new values without a fresh build.
+3. Verify: `curl -sI https://<your-domain>/ | grep -i content-security-policy` — the `img-src`
+   list must contain your `*.supabase.co` host. If it doesn't, the build ran without
+   `NEXT_PUBLIC_SUPABASE_URL` and image uploads/previews will fail.
+
+If an upload fails in the admin panel, the field now shows the real reason (missing
+variable, bucket not found, storage rejected the object, …) and the full error is in
+Vercel → Deployments → *Functions* logs under `[upload]`.
 
 ---
 

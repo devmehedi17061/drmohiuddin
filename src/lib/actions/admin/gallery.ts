@@ -59,6 +59,7 @@ export async function uploadGalleryImages(
       );
       saved++;
     } catch (err) {
+      if (!(err instanceof UploadError)) console.error("[gallery] unexpected upload error", err);
       failures.push(err instanceof UploadError ? err.message : `"${file.name}" failed to upload.`);
     }
   }
