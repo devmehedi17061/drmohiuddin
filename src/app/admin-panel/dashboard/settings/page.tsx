@@ -4,6 +4,7 @@ import { getSettings } from "@/lib/data/content";
 import { SETTING_GROUPS } from "@/lib/admin/settings-fields";
 import { PageHeader } from "@/components/admin/AdminShell";
 import { SettingsForm } from "@/components/admin/SettingsForm";
+import { UploadConfigNotice } from "@/components/admin/UploadConfigNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ export default async function SettingsPage() {
         title="Site Settings"
         description="Change all of the landing page's text, images and contact details here. Each section is saved separately."
       />
+
+      <UploadConfigNotice />
 
       <div className="space-y-6">
         {SETTING_GROUPS.map((group) => (

@@ -75,9 +75,36 @@ export const SETTING_DEFAULTS: SettingsMap = {
   footer_note: "সকল অধিকার সংরক্ষিত।",
 };
 
+/**
+ * `next build` prerenders the landing page, and that needs the database. Without
+ * this, a build machine with no DATABASE_URL (or a paused / unreachable
+ * Supabase project) aborts the whole deployment with "Error occurred
+ * prerendering page '/'". During the build phase only, a failed query falls
+ * back to defaults / an empty list so the deploy goes through; the page
+ * revalidates every 60s at runtime, where the real data comes through. At
+ * runtime the error still propagates, so a broken database is never silently
+ * masked as "empty content".
+ */
+function isBuildPhase(): boolean {
+  return process.env.NEXT_PHASE === "phase-production-build";
+}
+
+async function buildSafe<T>(label: string, fallback: T, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (!isBuildPhase()) throw err;
+    console.warn(
+      `[content] ${label}: database unavailable during build, prerendering with fallback data -`,
+      err instanceof Error ? err.message : err,
+    );
+    return fallback;
+  }
+}
+
 export const getSettings = cache(async (): Promise<SettingsMap> => {
-  const rows = await query<{ key: string; value: string | null }>(
-    "SELECT `key`, `value` FROM settings",
+  const rows = await buildSafe("settings", [], () =>
+    query<{ key: string; value: string | null }>("SELECT `key`, `value` FROM settings"),
   );
   const map: SettingsMap = { ...SETTING_DEFAULTS };
   for (const row of rows) {
@@ -88,43 +115,57 @@ export const getSettings = cache(async (): Promise<SettingsMap> => {
 });
 
 export const getServices = cache(async (): Promise<Service[]> =>
-  query<Service>(
-    "SELECT * FROM services WHERE is_active = 1 ORDER BY sort_order ASC, id ASC",
+  buildSafe("services", [], () =>
+    query<Service>("SELECT * FROM services WHERE is_active = 1 ORDER BY sort_order ASC, id ASC"),
   ),
 );
 
 export const getStats = cache(async (): Promise<Stat[]> =>
-  query<Stat>("SELECT * FROM stats WHERE is_active = 1 ORDER BY sort_order ASC, id ASC"),
+  buildSafe("stats", [], () =>
+    query<Stat>("SELECT * FROM stats WHERE is_active = 1 ORDER BY sort_order ASC, id ASC"),
+  ),
 );
 
 export const getCredentials = cache(async (): Promise<Credential[]> =>
-  query<Credential>(
-    "SELECT * FROM credentials WHERE is_active = 1 ORDER BY kind ASC, sort_order ASC, id ASC",
+  buildSafe("credentials", [], () =>
+    query<Credential>(
+      "SELECT * FROM credentials WHERE is_active = 1 ORDER BY kind ASC, sort_order ASC, id ASC",
+    ),
   ),
 );
 
 export const getChambers = cache(async (): Promise<Chamber[]> =>
-  query<Chamber>("SELECT * FROM chambers WHERE is_active = 1 ORDER BY sort_order ASC, id ASC"),
+  buildSafe("chambers", [], () =>
+    query<Chamber>("SELECT * FROM chambers WHERE is_active = 1 ORDER BY sort_order ASC, id ASC"),
+  ),
 );
 
 export const getGallery = cache(async (limit = 60): Promise<GalleryImage[]> =>
-  query<GalleryImage>(
-    `SELECT * FROM gallery_images WHERE is_active = 1
-     ORDER BY sort_order ASC, id DESC LIMIT ${Math.max(1, Math.min(200, Math.trunc(limit)))}`,
+  buildSafe("gallery", [], () =>
+    query<GalleryImage>(
+      `SELECT * FROM gallery_images WHERE is_active = 1
+       ORDER BY sort_order ASC, id DESC LIMIT ${Math.max(1, Math.min(200, Math.trunc(limit)))}`,
+    ),
   ),
 );
 
 export const getVideos = cache(async (): Promise<VideoItem[]> =>
-  query<VideoItem>("SELECT * FROM videos WHERE is_active = 1 ORDER BY sort_order ASC, id DESC"),
+  buildSafe("videos", [], () =>
+    query<VideoItem>("SELECT * FROM videos WHERE is_active = 1 ORDER BY sort_order ASC, id DESC"),
+  ),
 );
 
 export const getFaqs = cache(async (): Promise<Faq[]> =>
-  query<Faq>("SELECT * FROM faqs WHERE is_active = 1 ORDER BY sort_order ASC, id ASC"),
+  buildSafe("faqs", [], () =>
+    query<Faq>("SELECT * FROM faqs WHERE is_active = 1 ORDER BY sort_order ASC, id ASC"),
+  ),
 );
 
 export const getTestimonials = cache(async (): Promise<Testimonial[]> =>
-  query<Testimonial>(
-    "SELECT * FROM testimonials WHERE is_active = 1 ORDER BY sort_order ASC, id ASC",
+  buildSafe("testimonials", [], () =>
+    query<Testimonial>(
+      "SELECT * FROM testimonials WHERE is_active = 1 ORDER BY sort_order ASC, id ASC",
+    ),
   ),
 );
 

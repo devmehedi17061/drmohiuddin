@@ -29,6 +29,18 @@ function describe(err: unknown): string {
 let cachedClient: ReturnType<typeof createClient> | null = null;
 
 /**
+ * Names of the environment variables image uploads need but which are missing
+ * in this process. Empty when uploads are configured. Used by the admin pages
+ * to warn *before* an upload is attempted, rather than after it fails.
+ */
+export function missingUploadConfig(): string[] {
+  return [
+    !process.env.NEXT_PUBLIC_SUPABASE_URL && "NEXT_PUBLIC_SUPABASE_URL",
+    !process.env.SUPABASE_SERVICE_ROLE_KEY && "SUPABASE_SERVICE_ROLE_KEY",
+  ].filter((name): name is string => Boolean(name));
+}
+
+/**
  * A server-only Supabase client authenticated as the service role, so it
  * bypasses the (deliberately policy-less) Storage RLS on this bucket. Vercel's
  * serverless functions have a read-only filesystem, so uploads can't be

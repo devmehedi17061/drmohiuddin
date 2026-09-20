@@ -4,6 +4,7 @@ import { can } from "@/lib/auth/rbac";
 import type { GalleryImage } from "@/lib/types";
 import { PageHeader } from "@/components/admin/AdminShell";
 import { GalleryManager } from "@/components/admin/GalleryManager";
+import { UploadConfigNotice } from "@/components/admin/UploadConfigNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function GalleryPage() {
         title="Photo Gallery"
         description="Images for the landing page's gallery section. Reordering here also reorders them on the site."
       />
+      <UploadConfigNotice />
       <GalleryManager
         images={images}
         permissions={{

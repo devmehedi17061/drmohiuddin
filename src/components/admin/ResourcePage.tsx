@@ -4,6 +4,7 @@ import { can } from "@/lib/auth/rbac";
 import { getResource, type ResourceKey } from "@/lib/admin/resources";
 import { PageHeader } from "./AdminShell";
 import { ResourceManager, type RecordRow } from "./ResourceManager";
+import { UploadConfigNotice } from "./UploadConfigNotice";
 
 /**
  * Renders one config-driven CRUD section. Columns are derived from the resource
@@ -32,6 +33,7 @@ export async function ResourcePage({ resource }: { resource: ResourceKey }) {
   return (
     <>
       <PageHeader title={config.label} description={config.description} />
+      {config.fields.some((f) => f.type === "image") ? <UploadConfigNotice /> : null}
       <ResourceManager
         config={config}
         rows={rows}

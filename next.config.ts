@@ -4,10 +4,12 @@ const isProd = process.env.NODE_ENV === "production";
 
 // Uploaded images are stored in Supabase Storage (public bucket), not on local
 // disk - Vercel's serverless functions have a read-only filesystem, so this is
-// the same host in every environment.
-const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
-  ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
-  : undefined;
+// the same host in every environment. The host is allow-listed as a wildcard
+// rather than derived from NEXT_PUBLIC_SUPABASE_URL: this file runs at *build*
+// time, and a build without that variable used to produce a bundle in which
+// every uploaded image made `next/image` throw ("hostname not configured") and
+// the CSP blocked it - i.e. the public page broke the moment a photo was set.
+const SUPABASE_IMG_CSP = "https://*.supabase.co";
 
 /**
  * Content Security Policy.
@@ -23,7 +25,7 @@ const csp = [
   // 'unsafe-eval' is only needed by the dev-mode React Refresh runtime.
   `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com${supabaseHost ? ` https://${supabaseHost}` : ""}`,
+  `img-src 'self' data: blob: https://i.ytimg.com https://img.youtube.com ${SUPABASE_IMG_CSP}`,
   "font-src 'self' data:",
   // Dev needs the HMR websocket; production talks only to its own origin.
   `connect-src 'self'${isProd ? "" : " ws: http://localhost:*"}`,
@@ -59,9 +61,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       { protocol: "https", hostname: "i.ytimg.com" },
       { protocol: "https", hostname: "img.youtube.com" },
-      ...(supabaseHost
-        ? [{ protocol: "https" as const, hostname: supabaseHost, pathname: "/storage/v1/object/public/**" }]
-        : []),
+      { protocol: "https", hostname: "**.supabase.co", pathname: "/storage/v1/object/public/**" },
     ],
     formats: ["image/avif", "image/webp"],
   },

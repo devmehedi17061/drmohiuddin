@@ -54,9 +54,31 @@ Change `ADMIN_PASSWORD` before seeding, and change it again from the panel after
    list must contain your `*.supabase.co` host. If it doesn't, the build ran without
    `NEXT_PUBLIC_SUPABASE_URL` and image uploads/previews will fail.
 
+**Build fails with `DATABASE_URL is not set` / `Error occurred prerendering page "/"`?**
+The build machine has no database variable. Add `DATABASE_URL` for *Production* (and
+*Preview*, if you deploy branches) in step 1 and redeploy. Since the prerender is now
+build-tolerant, a missing variable no longer aborts the deploy - but the site will show
+placeholder content and the admin login will fail until the variable is actually set.
+
 If an upload fails in the admin panel, the field now shows the real reason (missing
 variable, bucket not found, storage rejected the object, …) and the full error is in
 Vercel → Deployments → *Functions* logs under `[upload]`.
+
+---
+
+## End-to-end check
+
+```bash
+npm run build
+npx next start -p 3100      # in one terminal
+npm run test:e2e            # in another
+```
+
+`db/e2e.mjs` drives the real server actions over HTTP (login → save Hero settings with a
+photo → gallery multi-upload → add a service with an image → delete everything → restore the
+Hero section) and verifies the database, Supabase Storage, the public page, the CSP and the
+`next/image` optimizer. It creates a throw-away ADMIN user for the login and removes it and
+everything it uploaded at the end. Run it against the database in `.env.local`.
 
 ---
 
