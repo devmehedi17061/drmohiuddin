@@ -1,13 +1,80 @@
-// End-to-end check against a running production server (next start).
-// Calls the real server actions over HTTP using React's server-action wire
-// format, then verifies the database and the public page. Never prints secrets.
+// End-to-end check: `npm run build` first, then `npm run test:e2e`.
+//
+// Starts `next start` itself (unless something already answers on the port),
+// calls the real server actions over HTTP using React's server-action wire
+// format, then verifies the database, Supabase Storage and the public page.
+// Uses a throw-away ADMIN user and removes everything it created at the end.
+// Never prints secrets.
+import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import bcrypt from "bcryptjs";
+import { randomBytes } from "node:crypto";
 import sharp from "sharp";
 import pg from "pg";
 
-const BASE = process.env.E2E_BASE ?? "http://localhost:3100";
+const PORT = Number(process.env.E2E_PORT ?? 3100);
+const BASE = process.env.E2E_BASE ?? `http://localhost:${PORT}`;
+
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL is not set - run via `npm run test:e2e` so .env.local is loaded.");
+  process.exit(1);
+}
+if (!existsSync(new URL("../.next/server/server-reference-manifest.json", import.meta.url))) {
+  console.error("No production build found. Run `npm run build` first, then `npm run test:e2e`.");
+  process.exit(1);
+}
 const manifest = (await import("../.next/server/server-reference-manifest.json", { with: { type: "json" } })).default;
 const ids = {};
 for (const [id, info] of Object.entries(manifest.node)) ids[info.exportedName] = id;
+
+// ---------------------------------------------------------------- server
+async function isUp() {
+  try {
+    const r = await fetch(`${BASE}/admin-panel/login`, { redirect: "manual", signal: AbortSignal.timeout(2000) });
+    return r.status > 0;
+  } catch {
+    return false;
+  }
+}
+
+let server = null;
+if (await isUp()) {
+  console.log(`Using the server already running at ${BASE}`);
+} else {
+  console.log(`Starting "next start -p ${PORT}" ...`);
+  // Run next's CLI with this same Node binary - no shell, so the pid is the
+  // server itself and killing it is reliable on every platform.
+  const nextBin = fileURLToPath(new URL("../node_modules/next/dist/bin/next", import.meta.url));
+  server = spawn(process.execPath, [nextBin, "start", "-p", String(PORT)], {
+    stdio: ["ignore", "pipe", "pipe"],
+    env: process.env,
+  });
+  const serverLog = [];
+  server.stdout.on("data", (d) => serverLog.push(String(d)));
+  server.stderr.on("data", (d) => serverLog.push(String(d)));
+  const deadline = Date.now() + 60_000;
+  while (!(await isUp())) {
+    if (server.exitCode !== null || Date.now() > deadline) {
+      console.error("The server did not start:\n" + serverLog.join("").slice(-2000));
+      process.exit(1);
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  console.log("Server is up.");
+}
+function stopServer() {
+  if (!server || server.exitCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    server.once("exit", resolve);
+    setTimeout(resolve, 5000); // never hang teardown on a stubborn process
+    if (process.platform === "win32") {
+      spawn("taskkill", ["/pid", String(server.pid), "/T", "/F"], { stdio: "ignore" });
+    } else {
+      server.kill("SIGTERM");
+    }
+  });
+}
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2, ssl: { rejectUnauthorized: false } });
 const sql = async (q, p = []) => (await pool.query(q, p)).rows;
@@ -57,8 +124,6 @@ async function objectExists(url) {
 // ---------------------------------------------------------------- 0. temporary admin account
 // The real admin's password is not known to this script, so it logs in with a
 // throw-away ADMIN user that it creates directly and removes at the end.
-import bcrypt from "bcryptjs";
-import { randomBytes } from "node:crypto";
 const TEST_EMAIL = `e2e-${Date.now().toString(36)}@example.invalid`;
 const TEST_PASSWORD = randomBytes(18).toString("base64url");
 const testUser = (await sql(
@@ -70,6 +135,19 @@ async function cleanupUser() {
   await sql("DELETE FROM login_attempts WHERE email = $1", [TEST_EMAIL]);
   await sql("DELETE FROM users WHERE id = $1", [testUser.id]);
 }
+// Whatever happens (assertion crash, network error), remove the test user and
+// stop the server we started so nothing is left behind.
+let finished = false;
+async function teardown(exitCode) {
+  if (finished) return;
+  finished = true;
+  try { await cleanupUser(); } catch (err) { console.error("cleanup failed:", err.message); }
+  try { await pool.end(); } catch {}
+  await stopServer();
+  process.exit(exitCode);
+}
+process.on("uncaughtException", async (err) => { console.error("\nCRASH:", err); await teardown(1); });
+process.on("unhandledRejection", async (err) => { console.error("\nCRASH:", err); await teardown(1); });
 
 // ---------------------------------------------------------------- 1. login
 {
@@ -81,7 +159,7 @@ async function cleanupUser() {
   cookie = sess ? sess.split(";")[0] : "";
   const redirected = /admin-panel\/dashboard/.test(r.text) || r.headers.get("x-action-redirect");
   step("login issues a session cookie and redirects to dashboard", Boolean(cookie) && Boolean(redirected), `status ${r.status}`);
-  if (!cookie) { console.log(r.text.slice(0, 500)); await cleanupUser(); await pool.end(); process.exit(1); }
+  if (!cookie) { console.log(r.text.slice(0, 500)); await teardown(1); }
 }
 
 // ---------------------------------------------------------------- 2. settings (text + photo)
@@ -187,8 +265,6 @@ let serviceImg = "";
   step("removed hero photo was deleted from Storage", heroUrl ? !(await objectExists(heroUrl)) : false);
 }
 
-await cleanupUser();
-await pool.end();
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
-process.exit(failed.length ? 1 : 0);
+await teardown(failed.length ? 1 : 0);
